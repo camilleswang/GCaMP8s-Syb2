@@ -1,3 +1,13 @@
+% Amp_F0_1st_clean                      Amplitude ΔF/F0 of all synapses in the coverslip in a column
+% Amp_syn_1st_clean                     Amplitude ΔF of all synapses in the coverslip in a column
+% decay_time_1st_clean                  Decay time of detected calcium transients 
+% peak_pos_syn_1st                      Position of detected peaks (time in seconds)
+% Pr_1st                                Likelihood of calcium event detection with stimulation
+% rise_time_1st_clean                   Rise time of detected calcium transients 
+% sROI                                  Matrix of fluorescent traces with smoothed baseline signal subtracted 
+
+%%-------------------------%%
+
 %% Select file and sheet 
 for nfile=1
     if nfile==1
