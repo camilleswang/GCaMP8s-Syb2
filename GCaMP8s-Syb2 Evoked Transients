@@ -1,0 +1,304 @@
+%% Select file and sheet 
+for nfile=1
+    if nfile==1
+        filename = 'Sample File.xlsx';
+        outfile = 'Sample File 00';
+    elseif nfile==2
+        filename = 'XX.xlsx';
+        outfile = 'XX 00';
+    elseif nfile==3
+        filename='YY.xlsx';
+        outfile = 'YY 00';
+    elseif nfile==4
+        filename='ZZ.xlsx';
+        outfile = 'ZZ 00';
+    end
+
+[status,sheets]=xlsfinfo(filename);
+NSheets=numel(sheets);
+
+Amp_syn_1st_comp=[];Amp_syn_2nd_comp=[];
+Amp_F0_1st_comp=[];Amp_F0_2nd_comp=[];
+Freq_syn_1st_comp=[]; Freq_syn_2nd_comp=[];
+time_peak_syn_1st=[]; time_peak_syn_2nd=[]; 
+Pr_1st_comp=[];Pr_2nd_comp=[];
+rise_time_1st_comp=[];rise_time_2nd_comp=[];
+decay_time_1st_comp=[];decay_time_2nd_comp=[];
+AmpKsize_1st_comp=[];AmpKsize_2nd_comp=[];
+AvgSyn_1st_comp=[]; AvgSyn_2nd_comp=[];NormAvgSyn_comp=[];
+
+
+for sheet = 1:NSheets
+    Data=xlsread(filename,sheet);
+    %column time
+    t=Data(:,3);
+    %matrix ROI
+    ROI=Data(:,5:end);
+    ogROI=Data(:,5:end);
+
+    %%Define variables
+
+    t_AP1=Data(1,1); %time of bleach
+    i_AP1=find(t>t_AP1,1);
+    t_HFS1=Data(2,1); %time at which 0.2Hz and 20Aps was delivered
+    i_HFS1=find(t>t_HFS1,1);
+    t_Tx=Data(3,1); %time of bleach
+    i_Tx=find(t>t_Tx,1);
+    t_Tx_end=Data(4,1); %time of bleach
+    i_Tx_end=find(t>t_Tx_end,1);
+    t_AP2=Data(5,1); %time of bleach
+    i_AP2=find(t>t_AP2,1);;
+    t_HFS=Data(6,1); %time at which 0.2Hz and 20Aps was delivered
+    i_HFS=find(t>t_HFS,1);
+    t_K=Data(7,1); %time at which 0.2Hz and 20Aps was delivered
+    i_K=find(t>t_K,1);
+
+    interval=10;
+
+    %% create NaNs
+    N_syn_1st=NaN(size(ROI,2),1);N_syn_2nd=NaN(size(ROI,2),1);
+%     N_asyn=NaN(size(ROI,2),1);
+%     Freq_asyn=NaN(size(ROI,2),1);
+    Amp_syn_1st=NaN(100,size(ROI,2));Amp_syn_2nd=NaN(100,size(ROI,2));
+    Amp_F0_syn_1st=NaN(100,size(ROI,2));Amp_F0_syn_2nd=NaN(100,size(ROI,2));
+%     Amp_asyn=NaN(100,size(ROI,2));
+    rise_time_1st=NaN(100,size(ROI,2)); rise_time_2nd=NaN(100,size(ROI,2)); 
+    decay_time_1st=NaN(100,size(ROI,2));decay_time_2nd=NaN(100,size(ROI,2));
+
+    sROI=NaN(size(ROI));
+    control_syn_1st=zeros(size(ROI));control_syn_2nd=zeros(size(ROI));
+%     control_asyn=zeros(size(ROI));
+    peak_pos_syn_1st=NaN(1000,size(control_syn_1st,2));
+    peak_pos_syn_2nd=NaN(1000,size(control_syn_1st,2));
+    baseline=NaN(size(ROI)); % to set baseline that will eventually be smoothed
+    Pr_1st=zeros(size(ROI,2),1);Pr_2nd=zeros(size(ROI,2),1);
+    dF_1st=NaN(100,1); dF_2nd=NaN(100,1); 
+    F0=NaN(size(ROI,2),1); K_size=NaN(size(ROI,2),1);
+    Amp_F0_org_1st=NaN(29,size(sROI,2));Amp_F0_org_2nd=NaN(29,size(sROI,2));
+    Amp_K_size_1st=NaN(29,size(sROI,2));Amp_K_size_2nd=NaN(29,size(sROI,2));
+    %Amp_baseline_bef=NaN(100,size(ROI,2));Amp_baseline_aft=NaN(100,size(ROI,2));
+    %half_time_bef=NaN(100,size(ROI,2));half_time_aft=NaN(100,size(ROI,2));
+
+
+%% Define, characterize, and count synchronous peaks 
+
+% options=optimoptions(@lsqcurvefit,'MaxFunEvals',1000,'MaxIter',1000,'Algorithm','levenberg-marquardt'); lb=[]; ub=[];
+% 
+% for w=1:size(ROI,2)
+% 
+% %     baseline(:,w)=smooth(ROI(:,w),5000); %create baseline by averaging a lot of pts
+% %     ROI(:,w)=ROI(:,w)-baseline(:,w); %subtract baseline from trace w peaks   
+%     baseline(1:i_HFS-10,w)=smooth(ROI(1:i_HFS-10,w),250); %create baseline by averaging a lot of pts
+%     t_range=t(1:i_AP1);
+%     exp_decay=@(x,t_range)ROI(1,w)*exp(-x*t_range)+mean(ROI(i_HFS-15:i_HFS-5,w)); x0=0;
+%     exp_param=lsqcurvefit(exp_decay,x0,t_range,ROI(1:i_AP1,w),lb,ub,options);
+%     Fit_baseline(:,w)=ROI(1,w)*exp(-exp_param*t)+mean(ROI(i_HFS-15:i_HFS-5,w));
+%     new_ROI(:,w)=ROI(:,w)-Fit_baseline(:,w);
+%     
+%     %     ROI(1:i_HFS-10,w)=ROI(1:i_HFS-10,w)-baseline(1:i_HFS-10,w); %subtract baseline from trace w peaks
+%     sROI(:,w)=smooth(new_ROI(:,w),3); %smooth subtracted trace
+%     
+%     % calculation of signal-to-noise ratio as mean divided by standard deviation:
+%     % SNR(:,w)=movmean(sROI(:,w),5)./movstd(sROI(:,w),5); 
+% %     SD(:,w) = movstd(sROI(:,w),5); 
+%     
+% end 
+% 
+% mean_ROI(:,1)=mean(ROI,2);
+
+%% Define, characterize, and count synchronous peaks 
+for w=1:size(ROI,2)
+
+    baseline(:,w)=smooth(ROI(:,w),250); %create baseline by averaging a lot of pts
+    ROI(:,w)=ROI(:,w)-baseline(:,w); %subtract baseline from trace w peaks
+    sROI(:,w)=smooth(ROI(:,w),3); %smooth subtracted trace
+
+    
+end 
+%% Define and characterize Synchronous peaks
+
+    %define synchronous peaks as within 300msec
+    for Stim_Num = 1:29 %  # of stim times
+        Stim_time_1st(Stim_Num)=(t_AP1+interval*(Stim_Num-1)); % time points at stim q5sec
+        Stim_time_2nd(Stim_Num)=(t_AP2+interval*(Stim_Num-1));
+    end 
+    
+    c=1;d=1;
+    
+    
+    for column_ROI = 1:size(sROI,2) %column by column = # of ROIs, previously j
+        num_peaks_syn_1st=0; %previously a 
+        num_peaks_syn_2nd=0; 
+        %average of first five seconds = F0
+        %F0(column_ROI) = mean(sROI(1:250,column_ROI));
+        
+        %amplitude of potassium response
+        K_size(column_ROI) = max(sROI(i_HFS:end,column_ROI))-mean(sROI(i_HFS-100:i_HFS-1,column_ROI));
+        
+        % Before Treatment
+        
+        for row_time = i_AP1-10:i_HFS1-30 %row by row = time, previously k
+            noise = std(sROI(row_time-20:row_time,column_ROI));
+            baseline_second = (mean(sROI(row_time-20:row_time,column_ROI)));
+            F0 = mean(ogROI(1:250,column_ROI));
+            %condition 1: peak detection, +3 is for the delay with SNR calculation
+            %condition 2: time proximity to evoked stim
+            %condition 3: so it doesn't double count the same peak that lasts longer than one time point
+            if ((mean(sROI(row_time:row_time+4,column_ROI)))> (3*noise+baseline_second)...
+                    && (any(abs(Stim_time_1st - t(row_time))<0.3)==1) ...
+                    && (mean(control_syn_1st(row_time-20:row_time-1,column_ROI))==0))
+                 num_peaks_syn_1st=num_peaks_syn_1st+1; % counting the number of peaks
+                 [M,I]=max(sROI(row_time:row_time+5,column_ROI));
+                 
+                 Amp_syn_1st(num_peaks_syn_1st,column_ROI)=max(sROI(row_time:row_time+5,column_ROI)) - baseline_second;
+                 control_syn_1st(row_time,column_ROI)=1; 
+                 Amp_F0_syn_1st(num_peaks_syn_1st,column_ROI)=Amp_syn_1st(num_peaks_syn_1st,column_ROI)/F0;
+                 Amp_K_size_1st(num_peaks_syn_1st,column_ROI)=Amp_syn_1st(num_peaks_syn_1st,column_ROI)/K_size(column_ROI);
+                 
+                 stim_counter=round((t(row_time)-t_AP1)/interval)+1;
+                 Amp_F0_org_1st(stim_counter,column_ROI)=Amp_syn_1st(num_peaks_syn_1st,column_ROI)/F0;
+
+                 %save peaks
+                 dF_1st(:,c)=sROI(row_time-25:row_time+74,column_ROI)-baseline_second;
+                 
+                 %rise and decay times
+                 [Fmax,Floc]=max(dF_1st(25:35,c)); % because we know peak starts at i=25
+                 acq_inter=t(end)/(size(t,1)-1); % exposure/interval for aquisition of images
+                 rise_time_1st(num_peaks_syn_1st,column_ROI)=(Floc)*acq_inter; % this is time from baseline to peak
+                 Dloc=find(dF_1st(35:end,c)<0,1);
+                 if isempty(Dloc)==0
+                     decay_time_1st(num_peaks_syn_1st,column_ROI)=(Dloc-Floc+9)*acq_inter; % this is total time from peak to baseline
+                 else
+                     decay_time_1st(num_peaks_syn_1st,column_ROI)=NaN;
+                 end
+                 
+                 c=c+1;
+                 
+            end
+            
+        end
+        %make this part of the column for loop so it runs a bit faster
+        N_syn_1st(column_ROI)=num_peaks_syn_1st;
+        Pr_1st(column_ROI)=num_peaks_syn_1st/29;
+        % time relationship to peaks found in matrix
+        temporary=find(control_syn_1st(:,column_ROI)==1);
+        peak_pos_syn_1st(1:size(temporary,1),column_ROI)=t(temporary);
+        
+        
+        mean_dF_1st=mean(dF_1st,2);
+    
+
+    for row_time = i_AP2-50:i_HFS-20
+            noise = std(sROI(row_time-20:row_time,column_ROI));
+            baseline_second = (mean(sROI(row_time-20:row_time,column_ROI)));
+            F0 = mean(ogROI(1:250,column_ROI));
+            %condition 1: peak detection, +3 is for the delay with SNR calculation
+            %condition 2: time proximity to evoked stim
+            %condition 3: so it doesn't double count the same peak that lasts longer than one time point
+            if ((mean(sROI(row_time:row_time+4,column_ROI)))> (3*noise+baseline_second)...
+                    && (any(abs(Stim_time_2nd - t(row_time))<0.3)==1) ...
+                    && (mean(control_syn_2nd(row_time-20:row_time-1,column_ROI))==0))
+                 num_peaks_syn_2nd=num_peaks_syn_2nd+1; % counting the number of peaks
+                 [M,I]=max(sROI(row_time:row_time+5,column_ROI));
+                 
+                 Amp_syn_2nd(num_peaks_syn_2nd,column_ROI)=max(sROI(row_time:row_time+5,column_ROI)) - baseline_second;
+                 control_syn_2nd(row_time,column_ROI)=1; 
+                 Amp_F0_syn_2nd(num_peaks_syn_2nd,column_ROI)=Amp_syn_2nd(num_peaks_syn_2nd,column_ROI)/F0;
+                 Amp_K_size_2nd(num_peaks_syn_2nd,column_ROI)=Amp_syn_2nd(num_peaks_syn_2nd,column_ROI)/K_size(column_ROI);
+                 
+                 stim_counter=round((t(row_time)-t_AP2)/interval)+1;
+                 Amp_F0_org_2nd(stim_counter,column_ROI)=Amp_syn_2nd(num_peaks_syn_2nd,column_ROI)/F0;
+
+                 %save peaks
+                 dF_2nd(:,d)=sROI(row_time-25:row_time+74,column_ROI)-baseline_second;
+                 
+                 %rise and decay times
+                 [Fmax,Floc]=max(dF_2nd(25:35,d)); % because we know peak starts at i=25
+                 acq_inter=t(end)/(size(t,1)-1); % exposure/interval for aquisition of images
+                 rise_time_2nd(num_peaks_syn_2nd,column_ROI)=(Floc)*acq_inter; % this is time from baseline to peak
+                 Dloc=find(dF_2nd(35:end,d)<0,1);
+                 if isempty(Dloc)==0
+                     decay_time_2nd(num_peaks_syn_2nd,column_ROI)=(Dloc-Floc+9)*acq_inter; % this is total time from peak to baseline
+                 else
+                     decay_time_2nd(num_peaks_syn_2nd,column_ROI)=NaN;
+                 end
+                 
+                 d=d+1;
+                 
+            
+        end
+        %make this part of the column for loop so it runs a bit faster
+        N_syn_2nd(column_ROI)=num_peaks_syn_2nd;
+        Pr_2nd(column_ROI)=num_peaks_syn_2nd/29;
+        % time relationship to peaks found in matrix
+        temporary=find(control_syn_2nd(:,column_ROI)==1);
+        peak_pos_syn_2nd(1:size(temporary,1),column_ROI)=t(temporary);
+        
+        
+        mean_dF_2nd=mean(dF_2nd,2);
+    end 
+    
+    
+    end         
+            
+    AvgSyn_1st = (nansum(Amp_F0_syn_1st)./(N_syn_1st'))';
+    AvgSyn_2nd = (nansum(Amp_F0_syn_2nd)./(N_syn_1st'))';
+    NormAvgSyn = (AvgSyn_2nd./AvgSyn_1st);
+    
+    % this IF is to only concateante if the script found peaks:
+    if isempty(peak_pos_syn_1st)==0
+        % numbers as it goes through sheets
+        % purple are all the sheets you want to save
+        Amp_syn_1st_clean=Amp_syn_1st(~isnan(Amp_syn_1st));
+        Amp_syn_1st_comp=vertcat(Amp_syn_1st_comp, Amp_syn_1st_clean);
+        Pr_1st_comp=vertcat(Pr_1st_comp,Pr_1st);
+        Amp_F0_1st_clean=Amp_F0_syn_1st(~isnan(Amp_F0_syn_1st));
+        Amp_F0_1st_comp=vertcat(Amp_F0_1st_comp, Amp_F0_1st_clean);
+        rise_time_1st_clean=rise_time_1st(~isnan(rise_time_1st));
+        rise_time_1st_comp=vertcat(rise_time_1st_comp, rise_time_1st_clean);
+        decay_time_1st_clean=decay_time_1st(~isnan(decay_time_1st));
+        decay_time_1st_comp=vertcat(decay_time_1st_comp, decay_time_1st_clean);
+        Amp_K_size_1st_clean=Amp_K_size_1st(~isnan(Amp_K_size_1st));
+        AmpKsize_1st_comp=vertcat(AmpKsize_1st_comp, Amp_K_size_1st_clean);
+        AvgSyn_1st_clean=AvgSyn_1st(~isnan(AvgSyn_1st));
+        AvgSyn_1st_comp=vertcat(AvgSyn_1st_comp, AvgSyn_1st_clean);
+    end
+
+   
+mean_pr_1st=mean(Pr_1st);
+mean_amp_f0_1st=mean(Amp_F0_1st_clean);
+
+    % this IF is to only concateante if the script found peaks:
+    if isempty(peak_pos_syn_2nd)==0
+        % numbers as it goes through sheets
+        % purple are all the sheets you want to save
+        Amp_syn_2nd_clean=Amp_syn_2nd(~isnan(Amp_syn_2nd));
+        Amp_syn_2nd_comp=vertcat(Amp_syn_2nd_comp, Amp_syn_2nd_clean);
+        Pr_2nd_comp=vertcat(Pr_2nd_comp,Pr_2nd);
+        Amp_F0_2nd_clean=Amp_F0_syn_2nd(~isnan(Amp_F0_syn_2nd));
+        Amp_F0_2nd_comp=vertcat(Amp_F0_2nd_comp, Amp_F0_2nd_clean);
+        rise_time_2nd_clean=rise_time_2nd(~isnan(rise_time_2nd));
+        rise_time_2nd_comp=vertcat(rise_time_2nd_comp, rise_time_2nd_clean);
+        decay_time_2nd_clean=decay_time_2nd(~isnan(decay_time_2nd));
+        decay_time_2nd_comp=vertcat(decay_time_2nd_comp, decay_time_2nd_clean);
+        Amp_K_size_2nd_clean=Amp_K_size_2nd(~isnan(Amp_K_size_2nd));
+        AmpKsize_2nd_comp=vertcat(AmpKsize_2nd_comp, Amp_K_size_2nd_clean);
+        AvgSyn_2nd_clean=AvgSyn_2nd(~isnan(AvgSyn_2nd));
+        AvgSyn_2nd_comp=vertcat(AvgSyn_2nd_comp, AvgSyn_2nd_clean);
+    end
+
+   
+mean_pr_2nd=mean(Pr_2nd);
+mean_amp_f0_2nd=mean(Amp_F0_2nd_clean);
+
+
+
+%save(outfile);
+save([outfile,num2str(sheet)]);
+
+ 
+end 
+%plot(t,sROI(:,1))
+clearvars -except nfile filename outfile sheet NSheets status sheets
+
+end 
